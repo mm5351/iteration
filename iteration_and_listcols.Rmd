@@ -141,8 +141,96 @@ for (i in 1:5) {
 output = map(vec_urls, read_page_reviews)
 ```
 
+##list columns
 
+```{r}
+weather = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728", "USC00519397", "USS0023B17S"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2016-01-01",
+    date_max = "2016-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY", 
+                      USC00519397 = "Waikiki_HA",
+                      USS0023B17S = "Waterhole_WA"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
 
+Nest within station
+```{r}
+weather_nest = 
+  weather %>% 
+  nest(data = date:tmin)
+```
 
+Is the list column really a list?
 
+```{r}
+weather_nest %>% pull(name)
+weather_nest %>% pull(data)
 
+weather_nest$data[[1]]
+
+##back to original dataset by unnesting
+weather_nest %>% 
+  unnest()
+```
+
+##Operations on list columns
+
+Can I do useful things with a list column?
+
+```{r}
+central_park_df = weather_nest$data[[1]]
+
+##fit linear model for Central Park
+lm(tmax ~ tmin, data = central_park_df)
+
+##fit linear model for all three
+lm(tmax ~ tmin, data = weather_nest$data[[1]])
+lm(tmax ~ tmin, data = weather_nest$data[[2]])
+lm(tmax ~ tmin, data = weather_nest$data[[3]])
+```
+
+Try a loop
+```{r}
+weather_lm = function(df) {
+  
+  lm(tmax ~ tmin, data = df)
+}
+```
+
+```{r}
+output = vector("list", length = 3)
+for (i in 1:3) {
+  
+  output[[i]] = weather_lm(weather_nest$data[[i]])
+  
+}
+
+output = map(weather_nest$data, weather_lm)
+```
+
+```{r}
+weather_nest %>% 
+  mutate(lin_models = map(data, weather_lm)) %>% 
+  select(-data) %>% 
+  filter(name != "CentralPark_NY")
+```
+
+##Revisit Napolean again
+```{r}
+napolean = 
+tibble(
+  page = 1:5,
+  urls = str_c(url_base, page)
+) %>%
+  mutate(
+    reviews = map(urls, read_page_reviews)
+  ) %>% 
+  unnest(reviews) %>% 
+  select(-urls)
+```
